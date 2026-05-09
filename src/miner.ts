@@ -1,103 +1,19 @@
 import { Octokit } from "@octokit/rest";
 import * as fs from "fs";
 import * as path from "path";
-import { Project, SyntaxKind, Node, CallExpression } from "ts-morph";
-
-export interface MinerConfig {
-  minStars: number;
-  language: string;
-  maxRepos: number;
-  maxFilesPerRepo: number;
-  globalFileLimit: number;
-  cooldownMs: number;
-  outputDir: string;
-  heuristics: {
-    minLines: number;
-    minAssertions: number;
-  };
-}
-
-export interface ExtractedTestCase {
-  text: string;
-  testName: string;
-  lineCount: number;
-  assertionCount: number;
-}
-
-export class MinerHelpers {
-  static sleep(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
-  static sanitizePathSegment(s: string, maxLen = 64): string {
-    const cleaned = s
-      .replace(/[/\\?*:|"<>]/g, "_")
-      .replace(/\s+/g, "_")
-      .replace(/_+/g, "_")
-      .replace(/^_|_$/g, "")
-      .slice(0, maxLen);
-    return cleaned || "unnamed";
-  }
-
-  static extractTestCasesFromSource(
-    content: string,
-    virtualFilename = "tests.ts",
-  ): ExtractedTestCase[] {
-    const project = new Project({ useInMemoryFileSystem: true });
-    const sourceFile = project.createSourceFile(virtualFilename, content, {
-      overwrite: true,
-    });
-
-    const tests: ExtractedTestCase[] = [];
-    const testCalls = sourceFile
-      .getDescendantsOfKind(SyntaxKind.CallExpression)
-      .filter((call) => MinerHelpers.isItOrTestCall(call));
-
-    for (const testCall of testCalls) {
-      const args = testCall.getArguments();
-      const testName =
-        args[0]?.getText().replace(/^["']|["']$/g, "") || "unknown";
-      const testBody = args[1];
-      if (!testBody) continue;
-
-      const text = testCall.getText();
-      const lineCount =
-        testCall.getEndLineNumber() - testCall.getStartLineNumber() + 1;
-
-      const assertions = testBody
-        .getDescendantsOfKind(SyntaxKind.CallExpression)
-        .filter((c) => {
-          const exp = c.getExpression();
-          return Node.isIdentifier(exp) && exp.getText() === "expect";
-        });
-
-      tests.push({
-        text,
-        testName,
-        lineCount,
-        assertionCount: assertions.length,
-      });
-    }
-
-    return tests;
-  }
-
-  private static getRootIdentifierName(expr: Node): string | undefined {
-    if (Node.isIdentifier(expr)) return expr.getText();
-    if (Node.isPropertyAccessExpression(expr))
-      return MinerHelpers.getRootIdentifierName(expr.getExpression());
-    return undefined;
-  }
-
-  private static isItOrTestCall(call: CallExpression): boolean {
-    const root = MinerHelpers.getRootIdentifierName(call.getExpression());
-    return root === "it" || root === "test";
-  }
-}
+import { defaultTestMetrics } from "./metrics/metric.helpers.ts";
+import {
+  AssertionCountMetric,
+  LineCountMetric,
+} from "./metrics/metric.registry.ts";
+import { MinerHelpers } from "./miner.helpers.ts";
+import type { ExtractedTestCase, MinerConfig } from "./types.ts";
+import { type Metric } from "./metrics/metric.ts";
 
 export class Miner {
   private readonly octokit: Octokit;
   private readonly config: MinerConfig;
+  private readonly metrics: readonly Metric<unknown>[];
 
   constructor(config: MinerConfig) {
     if (!process.env.GITHUB_TOKEN) {
@@ -105,9 +21,21 @@ export class Miner {
     }
 
     this.config = config;
+    this.metrics = config.metrics ?? defaultTestMetrics;
     this.octokit = new Octokit({
       auth: process.env.GITHUB_TOKEN,
     });
+  }
+
+  private passesHeuristic(tc: ExtractedTestCase): boolean {
+    const lineCount = Number(tc.metrics[new LineCountMetric().name] ?? 0);
+    const assertionCount = Number(
+      tc.metrics[new AssertionCountMetric().name] ?? 0,
+    );
+    return (
+      lineCount > this.config.heuristics.minLines ||
+      assertionCount > this.config.heuristics.minAssertions
+    );
   }
 
   async run(): Promise<void> {
@@ -168,6 +96,7 @@ export class Miner {
                 extracted = MinerHelpers.extractTestCasesFromSource(
                   content,
                   path.basename(file.path),
+                  this.metrics,
                 );
               } catch {
                 continue;
@@ -184,10 +113,7 @@ export class Miner {
                 if (totalDownloaded >= this.config.globalFileLimit) break;
 
                 const tc = extracted[i];
-                const passesHeuristic =
-                  tc.lineCount > this.config.heuristics.minLines ||
-                  tc.assertionCount > this.config.heuristics.minAssertions;
-                if (!passesHeuristic) continue;
+                if (!this.passesHeuristic(tc)) continue;
 
                 const outName = `${repoSlug}__${baseStem}__${i}.ts`;
                 const filePath = path.join(this.config.outputDir, outName);
@@ -197,10 +123,7 @@ export class Miner {
                 manifesto.push({
                   file: outName,
                   repo: repo.full_name,
-                  metrics: {
-                    lineCount: tc.lineCount,
-                    assertionCount: tc.assertionCount,
-                  },
+                  metrics: { ...tc.metrics },
                   originalPath: file.path,
                   testName: tc.testName,
                   testIndexInFile: i,

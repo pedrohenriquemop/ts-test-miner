@@ -1,5 +1,6 @@
 import * as dotenv from "dotenv";
-import { Miner, type MinerConfig } from "./miner.ts";
+import { Miner } from "./miner.ts";
+import type { MinerConfig } from "./types.ts";
 
 dotenv.config();
 
