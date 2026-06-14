@@ -1,11 +1,9 @@
 import axios from 'axios';
 import * as fs from 'fs';
 import * as path from 'path';
+import type { AnalyzerConfig } from '../config/index.ts';
 
-// Parameter to control the number of tests processed
-const NUM_TESTS = 5;
-
-async function analyzeTest(testCode: string, metadata: any) {
+async function analyzeTest(testCode: string, metadata: any, config: AnalyzerConfig) {
   const prompt = `
     Analyze the following TypeScript test:
     
@@ -19,8 +17,8 @@ async function analyzeTest(testCode: string, metadata: any) {
     FILE: [NAME] - SMELLS: [LIST] - JUSTIFICATION: [SHORT]
   `;
 
-  const response = await axios.post('http://localhost:11434/api/generate', {
-    model: 'detector-smells',
+  const response = await axios.post(config.ollamaUrl, {
+    model: config.model,
     prompt: prompt,
     stream: false
   });
@@ -65,10 +63,10 @@ function parseOllamaResponse(response: string): { smells: string[], justificatio
   return null;
 }
 
-async function run() {
-  const manifestPath = path.join(process.cwd(), 'manifesto_tests.json');
-  const geminiPath = path.join(process.cwd(), 'src', 'gemini_run.txt');
-  const testsDir = path.join(process.cwd(), 'tests');
+export async function runAnalyzer(config: AnalyzerConfig) {
+  const manifestPath = path.resolve(process.cwd(), config.manifestPath);
+  const geminiPath = path.resolve(process.cwd(), config.geminiResultsPath);
+  const testsDir = path.resolve(process.cwd(), config.testsDir);
 
   console.log("Loading metadata...");
   const manifestData = JSON.parse(fs.readFileSync(manifestPath, 'utf-8'));
@@ -79,7 +77,7 @@ async function run() {
 
   console.log("Parsing Gemini results...");
   const geminiResults = parseGeminiFile(geminiPath);
-  const testsToRun = geminiResults.slice(0, NUM_TESTS);
+  const testsToRun = geminiResults.slice(0, config.numTests);
 
   const comparisonResults = [];
 
@@ -107,7 +105,7 @@ async function run() {
     }
 
     try {
-      const ollamaData = await analyzeTest(testCode, metadata);
+      const ollamaData = await analyzeTest(testCode, metadata, config);
       const ollamaRawResponse = ollamaData.response;
       const parsedOllama = parseOllamaResponse(ollamaRawResponse);
 
@@ -154,9 +152,11 @@ async function run() {
     }
   }
 
-  const outputPath = path.join(process.cwd(), 'out', 'comparison_results.json');
+  if (!fs.existsSync(config.outputDir)) {
+    fs.mkdirSync(config.outputDir, { recursive: true });
+  }
+
+  const outputPath = path.join(process.cwd(), config.outputDir, 'comparison_results.json');
   fs.writeFileSync(outputPath, JSON.stringify(comparisonResults, null, 2));
   console.log(`\nAnalysis complete. Results saved to ${outputPath}`);
 }
-
-run();

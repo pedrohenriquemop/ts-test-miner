@@ -1,14 +1,14 @@
 import { Octokit } from "@octokit/rest";
 import * as fs from "fs";
 import * as path from "path";
-import { DEFAULT_METRICS } from "./metrics/metric.helpers.ts";
+import { DEFAULT_METRICS } from "../metrics/metric.helpers.ts";
 import {
   assertionCountMetric,
   lineCountMetric,
-} from "./metrics/metric.registry.ts";
+} from "../metrics/metric.registry.ts";
 import { MinerHelpers } from "./miner.helpers.ts";
-import type { ExtractedTestCase, MinerConfig } from "./types.ts";
-import type { MetricDescriptor } from "./metrics/metric.ts";
+import type { ExtractedTestCase, MinerConfig } from "../types.ts";
+import type { MetricDescriptor } from "../metrics/metric.ts";
 
 export class Miner {
   private readonly octokit: Octokit;

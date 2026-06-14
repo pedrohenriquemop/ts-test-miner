@@ -1,26 +1,20 @@
 import * as fs from "fs";
 import * as path from "path";
 
+import type { DatasetConfig } from '../config/index.ts';
+
 /**
  * Consolidates the manifest into fixed-size slices for LLM labelling.
  * Generates a pair of files per slice: sampled_manifesto_{index}.json and aggregated_tests_{index}.txt.
- *
- * @param testsFolder Path to the folder containing the mined .ts files.
- * @param manifestoPath Path to the original manifesto_tests.json file.
- * @param sampleSize Size of each slice (number of tests per output file).
  */
-export function prepareLlmLabelingDataset(
-  testsFolder: string,
-  manifestoPath: string,
-  sampleSize: number,
-  outputDir: string = "out",
-): void {
+export function prepareLlmLabelingDataset(config: DatasetConfig, testsFolder: string = "tests"): void {
   try {
+    const { sampleSize, manifestPath, outputDir } = config;
     if (!Number.isFinite(sampleSize) || sampleSize <= 0) {
       throw new Error("sampleSize must be a positive integer.");
     }
 
-    const rawManifesto = fs.readFileSync(manifestoPath, "utf-8");
+    const rawManifesto = fs.readFileSync(manifestPath, "utf-8");
     const fullManifesto = JSON.parse(rawManifesto) as unknown[];
     const total = fullManifesto.length;
     const batchCount = Math.ceil(total / sampleSize);
@@ -91,6 +85,3 @@ export function prepareLlmLabelingDataset(
     console.error("❌ Error preparing dataset:", error.message);
   }
 }
-
-// Example execution
-prepareLlmLabelingDataset("tests", "manifesto_tests.json", 50);

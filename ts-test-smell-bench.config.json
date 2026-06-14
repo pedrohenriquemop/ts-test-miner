@@ -1,0 +1,29 @@
+{
+  "miner": {
+    "minStars": 200,
+    "language": "typescript",
+    "maxRepos": 100,
+    "maxFilesPerRepo": 100,
+    "globalFileLimit": 1000,
+    "cooldownMs": 500,
+    "outputDir": "./tests",
+    "heuristics": {
+      "minLines": 10,
+      "minAssertions": 0
+    }
+  },
+  "dataset": {
+    "sampleSize": 50,
+    "outputDir": "./out/dataset",
+    "manifestPath": "./manifesto_tests.json"
+  },
+  "analyzer": {
+    "model": "detector-smells",
+    "ollamaUrl": "http://localhost:11434/api/generate",
+    "numTests": 5,
+    "manifestPath": "./manifesto_tests.json",
+    "testsDir": "./tests",
+    "geminiResultsPath": "./src/gemini_run.txt",
+    "outputDir": "./out/analysis"
+  }
+}

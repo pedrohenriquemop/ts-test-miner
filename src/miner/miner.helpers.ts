@@ -2,9 +2,9 @@ import { CallExpression, Node, Project, SyntaxKind } from "ts-morph";
 import {
   DEFAULT_METRICS,
   metricsRecord,
-} from "./metrics/metric.helpers.ts";
-import type { MetricDescriptor } from "./metrics/metric.ts";
-import type { ExtractedTestCase } from "./types.ts";
+} from "../metrics/metric.helpers.ts";
+import type { MetricDescriptor } from "../metrics/metric.ts";
+import type { ExtractedTestCase } from "../types.ts";
 
 export class MinerHelpers {
   static sleep(ms: number): Promise<void> {

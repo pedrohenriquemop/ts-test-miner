@@ -1,5 +1,5 @@
 {
-  "name": "miner",
+  "name": "ts-test-smell-bench",
   "version": "1.0.0",
   "main": "index.js",
   "type": "module",
@@ -13,6 +13,7 @@
     "@huggingface/hub": "^2.11.2",
     "@octokit/rest": "^22.0.1",
     "axios": "^1.16.1",
+    "commander": "^15.0.0",
     "dotenv": "^17.4.2",
     "ts-morph": "^28.0.0"
   },
