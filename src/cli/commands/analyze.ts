@@ -7,6 +7,7 @@ export const analyzeCommand = new Command('analyze')
   .option('-c, --config <path>', 'Path to config file', 'ts-test-smell-bench.config.json')
   .option('--num-tests <number>', 'Override number of tests to analyze')
   .option('--model <name>', 'Override Ollama model name')
+  .option('-v, --version-suffix <version>', 'Version suffix for the output files')
   .action(async (options) => {
     try {
       const config = loadConfig(options.config);
@@ -14,6 +15,7 @@ export const analyzeCommand = new Command('analyze')
       
       if (options.numTests) analyzerConfig.numTests = parseInt(options.numTests, 10);
       if (options.model) analyzerConfig.model = options.model;
+      if (options.versionSuffix) analyzerConfig.version = options.versionSuffix;
       
       await runAnalyzer(analyzerConfig);
     } catch (error) {

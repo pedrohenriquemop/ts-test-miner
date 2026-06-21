@@ -29,6 +29,7 @@ export interface AnalyzerConfig {
   testsDir: string;
   geminiResultsPath: string;
   outputDir: string;
+  version?: string;
 }
 
 export interface AppConfig {

@@ -156,7 +156,8 @@ export async function runAnalyzer(config: AnalyzerConfig) {
     fs.mkdirSync(config.outputDir, { recursive: true });
   }
 
-  const outputPath = path.join(process.cwd(), config.outputDir, 'comparison_results.json');
+  const versionSuffix = config.version ? `_v${config.version}` : '';
+  const outputPath = path.join(process.cwd(), config.outputDir, `comparison_results${versionSuffix}.json`);
   fs.writeFileSync(outputPath, JSON.stringify(comparisonResults, null, 2));
   console.log(`\nAnalysis complete. Results saved to ${outputPath}`);
 }

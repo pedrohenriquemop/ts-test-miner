@@ -23,7 +23,7 @@
     "numTests": 5,
     "manifestPath": "./manifesto_tests.json",
     "testsDir": "./tests",
-    "geminiResultsPath": "./ignore/gemini_run.txt",
+    "geminiResultsPath": "./goldset/run.txt",
     "outputDir": "./out/analysis"
   }
 }

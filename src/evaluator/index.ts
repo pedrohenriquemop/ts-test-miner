@@ -1,5 +1,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
+import { ChartJSNodeCanvas } from 'chartjs-node-canvas';
+import type { ChartConfiguration } from 'chart.js';
 
 export interface ComparisonResult {
   file: string;
@@ -21,7 +23,8 @@ export interface Metric {
 }
 
 export async function evaluateResults(config: any) {
-  const inputPath = path.resolve(process.cwd(), config.analyzer.outputDir, 'comparison_results.json');
+  const versionSuffix = config.analyzer.version ? `_v${config.analyzer.version}` : '';
+  const inputPath = path.resolve(process.cwd(), config.analyzer.outputDir, `comparison_results${versionSuffix}.json`);
   
   if (!fs.existsSync(inputPath)) {
     console.error(`Error: Comparison results not found at ${inputPath}`);
@@ -33,11 +36,19 @@ export async function evaluateResults(config: any) {
   const smellTypes = new Set<string>();
   
   // Normalize and collect all unique smell types
+  const normalizeSmell = (smell: string) => {
+    const s = smell.trim();
+    if (s === 'Magic Number' || s === 'Hardcoded Literal') {
+      return 'Magic Number/Hardcoded Literal';
+    }
+    return s;
+  };
+
   for (const result of data) {
     if (result.ollamaStatus !== 'success') continue;
     
-    result.geminiSmells.forEach(s => smellTypes.add(s.trim()));
-    result.ollamaSmells.forEach(s => smellTypes.add(s.trim()));
+    result.geminiSmells.forEach(s => smellTypes.add(normalizeSmell(s)));
+    result.ollamaSmells.forEach(s => smellTypes.add(normalizeSmell(s)));
   }
 
   smellTypes.delete('None');
@@ -54,8 +65,8 @@ export async function evaluateResults(config: any) {
     let tn = 0;
 
     for (const result of validData) {
-      const geminiHas = result.geminiSmells.some(s => s.trim() === smell);
-      const ollamaHas = result.ollamaSmells.some(s => s.trim() === smell);
+      const geminiHas = result.geminiSmells.some(s => normalizeSmell(s) === smell);
+      const ollamaHas = result.ollamaSmells.some(s => normalizeSmell(s) === smell);
 
       if (geminiHas && ollamaHas) tp++;
       else if (!geminiHas && ollamaHas) fp++;
@@ -84,15 +95,16 @@ export async function evaluateResults(config: any) {
     fs.mkdirSync(outputDir, { recursive: true });
   }
 
-  const jsonOutputPath = path.join(outputDir, 'evaluation_metrics.json');
+  const jsonOutputPath = path.join(outputDir, `evaluation_metrics${versionSuffix}.json`);
   fs.writeFileSync(jsonOutputPath, JSON.stringify(metrics, null, 2));
   console.log(`JSON metrics saved to ${jsonOutputPath}`);
 
-  generateHtmlReport(metrics, totalFiles, outputDir);
+  generateHtmlReport(metrics, totalFiles, outputDir, versionSuffix);
+  await generatePngCharts(metrics, outputDir, versionSuffix);
 }
 
-function generateHtmlReport(metrics: Metric[], totalFiles: number, outputDir: string) {
-  const htmlOutputPath = path.join(outputDir, 'report.html');
+function generateHtmlReport(metrics: Metric[], totalFiles: number, outputDir: string, versionSuffix: string = '') {
+  const htmlOutputPath = path.join(outputDir, `report${versionSuffix}.html`);
   
   const labels = metrics.map(m => m.smell);
   const precisionData = metrics.map(m => m.precision);
@@ -104,7 +116,7 @@ function generateHtmlReport(metrics: Metric[], totalFiles: number, outputDir: st
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Test Smell Evaluation Report</title>
+    <title>Test Smell Evaluation Report${versionSuffix ? ` (v${versionSuffix.replace('_v', '')})` : ''}</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script>
@@ -138,7 +150,7 @@ function generateHtmlReport(metrics: Metric[], totalFiles: number, outputDir: st
         
         <header class="text-center py-10 glass-panel">
             <h1 class="text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-primary to-secondary drop-shadow-sm mb-4">
-                Test Smell Benchmarking
+                Test Smell Benchmarking${versionSuffix ? ` (v${versionSuffix.replace('_v', '')})` : ''}
             </h1>
             <p class="text-xl text-gray-400">Ollama vs Gemini Baseline</p>
             <div class="mt-6 flex justify-center gap-6 text-sm font-medium">
@@ -289,4 +301,80 @@ function generateHtmlReport(metrics: Metric[], totalFiles: number, outputDir: st
 
   fs.writeFileSync(htmlOutputPath, html);
   console.log(`Interactive HTML Report saved to ${htmlOutputPath}`);
+}
+
+async function generatePngCharts(metrics: Metric[], outputDir: string, versionSuffix: string = '') {
+  const width = 1200;
+  const height = 800;
+  const backgroundColour = 'white';
+  const chartJSNodeCanvas = new ChartJSNodeCanvas({ width, height, backgroundColour });
+
+  const labels = metrics.map(m => m.smell);
+  const precision = metrics.map(m => m.precision);
+  const recall = metrics.map(m => m.recall);
+  const f1 = metrics.map(m => m.f1);
+
+  const fontOptions = {
+    family: "'Times New Roman', Times, serif",
+    size: 16
+  };
+
+  const barConfig: ChartConfiguration = {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'Precision', data: precision, backgroundColor: '#444444', borderColor: '#000000', borderWidth: 1 },
+        { label: 'Recall', data: recall, backgroundColor: '#888888', borderColor: '#000000', borderWidth: 1 },
+        { label: 'F1-Score', data: f1, backgroundColor: '#cccccc', borderColor: '#000000', borderWidth: 1 }
+      ]
+    },
+    options: {
+      plugins: {
+        legend: { labels: { font: fontOptions, color: '#000000' } },
+        title: { display: true, text: 'Metrics Overview (P/R/F1)', font: { ...fontOptions, size: 24, weight: 'bold' }, color: '#000000' }
+      },
+      scales: {
+        y: { beginAtZero: true, max: 1, ticks: { font: fontOptions, color: '#000000' }, grid: { color: '#e0e0e0' }, title: { display: true, text: 'Score', font: fontOptions, color: '#000000' } },
+        x: { ticks: { font: fontOptions, color: '#000000' }, grid: { display: false }, title: { display: true, text: 'Test Smell Type', font: fontOptions, color: '#000000' } }
+      }
+    }
+  };
+
+  const radarConfig: ChartConfiguration = {
+    type: 'radar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'F1-Score',
+        data: f1,
+        backgroundColor: 'rgba(0, 0, 0, 0.1)',
+        borderColor: '#000000',
+        pointBackgroundColor: '#000000',
+        borderWidth: 2,
+      }]
+    },
+    options: {
+      plugins: {
+        legend: { display: false },
+        title: { display: true, text: 'F1-Score Distribution', font: { ...fontOptions, size: 24, weight: 'bold' }, color: '#000000' }
+      },
+      scales: {
+        r: {
+          angleLines: { color: '#cccccc' },
+          grid: { color: '#cccccc' },
+          pointLabels: { font: fontOptions, color: '#000000' },
+          ticks: { backdropColor: 'transparent', font: fontOptions, color: '#000000', max: 1, min: 0 }
+        }
+      }
+    }
+  };
+
+  const barBuffer = await chartJSNodeCanvas.renderToBuffer(barConfig);
+  fs.writeFileSync(path.join(outputDir, `metrics_bar_chart${versionSuffix}.png`), barBuffer);
+  console.log(`Saved PNG chart to ${path.join(outputDir, `metrics_bar_chart${versionSuffix}.png`)}`);
+
+  const radarBuffer = await chartJSNodeCanvas.renderToBuffer(radarConfig);
+  fs.writeFileSync(path.join(outputDir, `metrics_radar_chart${versionSuffix}.png`), radarBuffer);
+  console.log(`Saved PNG chart to ${path.join(outputDir, `metrics_radar_chart${versionSuffix}.png`)}`);
 }
